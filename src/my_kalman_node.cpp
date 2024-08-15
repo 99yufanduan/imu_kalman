@@ -263,9 +263,6 @@ void ImuKalmanNode::positionPredict(Eigen::Vector2d u_position_k)
     x_position_k = A_position * x_position_k + B_position * u_position_k;
     /**** 状态协方差预测 ****/
     P_position_k = A_position * P_position_k * A_position.transpose() + W_position;
-    std::cout << "positon predict" << x_position_k << std::endl;
-    std::cout << "cov" << P_position_k << std::endl;
-    std::cout << "16:34:48: " << x_k[2] << std::endl;
 }
 
 int main(int argc, char **argv)
