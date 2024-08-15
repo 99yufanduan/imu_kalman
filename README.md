@@ -92,8 +92,7 @@ gcos(\theta)cos(\phi)
 \right]+v
 $$
 
-- 线性化观测方程
-使用泰勒公式保留一阶雅可比矩阵
+- 线性化观测方程 使用泰勒公式保留一阶雅可比矩阵
 
 $$
 H = \frac{\partial h(x)}{\partial x}=
