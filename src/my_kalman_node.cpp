@@ -92,7 +92,7 @@ private:
 public:
     ImuKalmanNode(const double gyro_noise, const double acc_noise) : Node("imu_kalman_node")
     {
-        x_k = Eigen::Vector3d(0, 0, 1);          // rp
+        x_k = Eigen::Vector3d(0, 0, 0);          // rp
         x_position_k = Eigen::Vector3d(0, 0, 0); // rp
         W = Eigen::Matrix3d{
             {gyro_noise * gyro_noise, 0, 0},
@@ -256,8 +256,8 @@ void ImuKalmanNode::positionPredict(Eigen::Vector2d u_position_k)
 {
 
     B_position = Eigen::Matrix<double, 3, 2>{
-        {delta_t * cos(x_k[2]), 0},
-        {delta_t * sin(x_k[2]), 0},
+        {delta_t * 2 * cos(x_k[2]), 0},
+        {delta_t * 2 * sin(x_k[2]), 0},
         {0, 0}};
     /**** 状态预测 ****/
     x_position_k = A_position * x_position_k + B_position * u_position_k;
@@ -265,6 +265,7 @@ void ImuKalmanNode::positionPredict(Eigen::Vector2d u_position_k)
     P_position_k = A_position * P_position_k * A_position.transpose() + W_position;
     std::cout << "positon predict" << x_position_k << std::endl;
     std::cout << "cov" << P_position_k << std::endl;
+    std::cout << "16:34:48: " << x_k[2] << std::endl;
 }
 
 int main(int argc, char **argv)
