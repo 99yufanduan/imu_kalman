@@ -148,7 +148,7 @@ $$
 acc\_noise=
  \sqrt {\frac {1}{N}\sum _ {i=1}^ {n}(x_ {i}-\mu )^ {2}} 
 $$
-### 初始状态
+### init state
 $$
 x_0=
 \left[
