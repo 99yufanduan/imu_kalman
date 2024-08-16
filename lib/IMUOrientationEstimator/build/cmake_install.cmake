@@ -1,4 +1,4 @@
-# Install script for directory: /home/dyf/project/imu_kalman_ws/src/imu_kalman/lib/IMUOrientationEstimator
+# Install script for directory: /home/dyf/project/imu_wheel_lidar_ws/src/imu_kalman/lib/IMUOrientationEstimator
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/dyf/project/imu_kalman_ws/src/imu_kalman/lib/IMUOrientationEstimator/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/dyf/project/imu_wheel_lidar_ws/src/imu_kalman/lib/IMUOrientationEstimator/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

@@ -12,11 +12,14 @@
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/buffer.h"
 
-#include "Estimator.h"
-
 #include <sensor_msgs/msg/imu.hpp>
 
 #include <memory>
+
+#include <Eigen/Core>
+
+#include <Eigen/Dense>
+
 using std::placeholders::_1;
 
 const double gyro_noise = 1e-6; // 单位m/s^2
@@ -140,7 +143,7 @@ void ImuKalmanNode::imuCallback(const sensor_msgs::msg::Imu::UniquePtr imu_in)
     double timestamp = imu_in->header.stamp.sec;
 
     geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
-    pose_msg.header.stamp = this->now();
+    pose_msg.header.stamp = imu_in->header.stamp;
     pose_msg.header.frame_id = "world";
     Eigen::Quaterniond q = rpyToQuaternion(x_k[0], x_k[1], x_k[2]);
 
