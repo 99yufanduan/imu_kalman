@@ -22,7 +22,7 @@
 
 using std::placeholders::_1;
 
-const double gyro_noise = 1e-6; // 单位m/s^2
+const double gyro_noise = 1e-6; // 单位m/s
 const double acc_noise = 1e-6;  // 单位m/s^2
 const double wheel_noise = 0.01;
 const double delta_t = 0.01; // 单位 s
@@ -37,10 +37,12 @@ class ImuKalmanNode : public rclcpp::Node
 private:
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr sub_twist_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr sub_pose_;
     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pub_;
 
     void imuCallback(const sensor_msgs::msg::Imu::UniquePtr imu_in);
     void wheelCallback(const nav_msgs::msg::Odometry::UniquePtr odom_in);
+    void poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::UniquePtr pose_in);
     void publishPose();
     void predict(Eigen::Vector3d u_k);
     void update(Eigen::Vector3d z_k);
@@ -95,8 +97,8 @@ private:
 public:
     ImuKalmanNode(const double gyro_noise, const double acc_noise) : Node("imu_kalman_node")
     {
-        x_k = Eigen::Vector3d(0, 0, 0);          // rp
-        x_position_k = Eigen::Vector3d(0, 0, 0); // rp
+        x_k = Eigen::Vector3d(0, 0, 0);          // rpy
+        x_position_k = Eigen::Vector3d(0, 0, 0); // xyz
         W = Eigen::Matrix3d{
             {gyro_noise * gyro_noise, 0, 0},
             {0, gyro_noise * gyro_noise, 0},
@@ -111,11 +113,12 @@ public:
                                        {0, 0, epsilon}};
 
         sub_ = this->create_subscription<sensor_msgs::msg::Imu>("/Imu_data", 10, std::bind(&ImuKalmanNode::imuCallback, this, _1));
+        sub_pose_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>("/ndt_pose", 10, std::bind(&ImuKalmanNode::poseCallback, this, _1));
         sub_twist_ = this->create_subscription<nav_msgs::msg::Odometry>("/odom", 10, std::bind(&ImuKalmanNode::wheelCallback, this, _1));
-        pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("imu_kalman", 10);
+        pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/ekf_pose_with_covariance", 10);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
     }
-    void estimator(Eigen::Vector3d gyro, Eigen::Vector3d acc, const double delta_t);
+    void estimator(Eigen::Vector3d gyro, Eigen::Vector3d acc);
 };
 
 Eigen::Quaterniond rpyToQuaternion(double roll_rad, double pitch_rad, double yaw_rad)
@@ -135,16 +138,11 @@ void ImuKalmanNode::imuCallback(const sensor_msgs::msg::Imu::UniquePtr imu_in)
 {
     Eigen::Vector3d acc(imu_in->linear_acceleration.x, imu_in->linear_acceleration.y, imu_in->linear_acceleration.z); // 单位为m/s^2
     Eigen::Vector3d gyro(imu_in->angular_velocity.x, imu_in->angular_velocity.y, imu_in->angular_velocity.z);         // 单位为rad/s
-    static double time_pre = 0;
-    const double delta_t = (imu_in->header.stamp.nanosec - time_pre) / 1e9; // 将时间差转换为秒
-    estimator(gyro, acc, delta_t);
-    time_pre = imu_in->header.stamp.nanosec;
-
-    double timestamp = imu_in->header.stamp.sec;
+    estimator(gyro, acc);
 
     geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
     pose_msg.header.stamp = imu_in->header.stamp;
-    pose_msg.header.frame_id = "world";
+    pose_msg.header.frame_id = "odom";
     Eigen::Quaterniond q = rpyToQuaternion(x_k[0], x_k[1], x_k[2]);
 
     pose_msg.pose.pose.orientation.x = q.x();
@@ -182,11 +180,13 @@ void ImuKalmanNode::imuCallback(const sensor_msgs::msg::Imu::UniquePtr imu_in)
     pose_msg.pose.covariance[34] = P_k(2, 1);
     pose_msg.pose.covariance[35] = P_k(2, 2);
 
+    pub_->publish(pose_msg);
+
     geometry_msgs::msg::TransformStamped t; // 四元数+平移
 
     t.header.stamp = this->get_clock()->now();
-    t.header.frame_id = "world";
-    t.child_frame_id = "odom";
+    t.header.frame_id = "odom";
+    t.child_frame_id = "base_link";
     t.transform.translation.x = x_position_k[0];
     t.transform.translation.y = x_position_k[1];
     t.transform.translation.z = x_position_k[2];
@@ -200,13 +200,26 @@ void ImuKalmanNode::imuCallback(const sensor_msgs::msg::Imu::UniquePtr imu_in)
     // t.transform.rotation.w = imu_in->orientation.w;
     // Send the transformation
     tf_broadcaster_->sendTransform(t);
-    pub_->publish(pose_msg);
 }
 
 void ImuKalmanNode::wheelCallback(const nav_msgs::msg::Odometry::UniquePtr odom_in)
 {
     Eigen::Vector2d u_position = Eigen::Vector2d(odom_in->twist.twist.linear.x, odom_in->twist.twist.angular.z);
     positionPredict(u_position);
+}
+
+void ImuKalmanNode::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::UniquePtr pose_in)
+{
+    Eigen::Quaterniond quaternion(pose_in->pose.pose.orientation.w, pose_in->pose.pose.orientation.x, pose_in->pose.pose.orientation.y, pose_in->pose.pose.orientation.z); // 四元数 (w, x, y, z)
+    // 将四元数转换为 3x3 旋转矩阵
+    Eigen::Matrix3d rotation_matrix = quaternion.toRotationMatrix();
+    // 使用 Eigen 提供的函数将旋转矩阵转换为欧拉角（RPY）
+    Eigen::Vector3d euler_angles = rotation_matrix.eulerAngles(0, 1, 2); //  Roll (X),Pitch (Y),Yaw (Z)
+    x_k = euler_angles;
+    x_position_k[0] = pose_in->pose.pose.position.x;
+    x_position_k[1] = pose_in->pose.pose.position.y;
+    x_position_k[2] = pose_in->pose.pose.position.z;
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"), "initial pose update");
 }
 
 void ImuKalmanNode::predict(Eigen::Vector3d gyro) // u_k =gyro.xyz
@@ -249,7 +262,7 @@ void ImuKalmanNode::update(Eigen::Vector3d acc) // z_k =acc.xyz
     /**********************(Debug END)********************/
 }
 
-void ImuKalmanNode::estimator(Eigen::Vector3d gyro, Eigen::Vector3d acc, const double delta_t) // gyro.xyz
+void ImuKalmanNode::estimator(Eigen::Vector3d gyro, Eigen::Vector3d acc) // gyro.xyz
 {
     predict(gyro);
     update(acc);
